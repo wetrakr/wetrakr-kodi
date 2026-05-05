@@ -1,0 +1,70 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Derive version from tag
+        id: ver
+        run: |
+          TAG="${GITHUB_REF_NAME}"
+          VER="${TAG#v}"
+          echo "version=${VER}" >> "$GITHUB_OUTPUT"
+
+      - name: Sync version into addon.xml
+        env:
+          VER: ${{ steps.ver.outputs.version }}
+        run: |
+          python3 - <<'PY'
+          import os, re, pathlib
+          v = os.environ['VER']
+          p = pathlib.Path('addon.xml')
+          x = p.read_text()
+          x = re.sub(r'(<addon\b[^>]*?\bversion=")[^"]*(")', rf'\g<1>{v}\g<2>', x, count=1)
+          p.write_text(x)
+          PY
+          grep -n 'version=' addon.xml | head -3
+
+      - name: Build addon zip
+        id: pkg
+        run: |
+          VER="${{ steps.ver.outputs.version }}"
+          ZIP="script.wetrakr-${VER}.zip"
+
+          # Stage files in the expected Kodi folder layout: script.wetrakr/<files>
+          STAGING="$(mktemp -d)"
+          mkdir -p "$STAGING/script.wetrakr"
+          rsync -a \
+            --exclude='.git' \
+            --exclude='.github' \
+            --exclude='.gitignore' \
+            --exclude='*.zip' \
+            --exclude='__pycache__' \
+            --exclude='*.pyc' \
+            --exclude='.DS_Store' \
+            ./ "$STAGING/script.wetrakr/"
+
+          (cd "$STAGING" && zip -qr "${GITHUB_WORKSPACE}/${ZIP}" "script.wetrakr")
+          ls -lh "${GITHUB_WORKSPACE}/${ZIP}"
+          echo "zip=${ZIP}" >> "$GITHUB_OUTPUT"
+
+      - name: Upload to GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: ${{ steps.pkg.outputs.zip }}
+          generate_release_notes: true
+          body: |
+            Install: download `${{ steps.pkg.outputs.zip }}` and use **Kodi → Add-ons → Install from zip file**.
+
+            See the [README](https://github.com/${{ github.repository }}#install) for the full setup.
