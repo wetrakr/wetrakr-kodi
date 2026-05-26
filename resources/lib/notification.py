@@ -4,10 +4,12 @@ notification.py — Branded WeTrakr notification popup.
 Shows a small notification in the top-right corner with the WeTrakr
 "We" logo, purple accent bar, and dark panel background.
 
-The auto-close runs in a background thread so the caller (usually a
-xbmc.Player callback) returns immediately. Blocking the main thread
-with xbmc.sleep made Kodi unresponsive — among other things, the
-fast-forward keys stopped working while a notification was on screen.
+The entire popup lifecycle — building the WindowDialog, show(), the
+sleep, and close() — runs on a background daemon thread so the
+caller (typically an xbmc.Player callback) returns immediately.
+Building the dialog on the Player thread caused a brief A/V freeze
+on bitstream-passthrough setups when the 'watched' notification
+fired (the overlay repaint forced an audio mode renegotiation).
 """
 
 import os
@@ -105,24 +107,25 @@ class WeTrakrNotification(xbmcgui.WindowDialog):
 
 
 def notify(title, message, duration=3000):
-    """Show a branded WeTrakr notification popup (non-blocking).
+    """Show a branded WeTrakr notification popup (fire-and-forget).
 
-    The dialog is shown immediately and a background thread waits for
-    `duration` ms before closing it. The caller returns right away so
-    Kodi's main thread (and player input) keeps flowing.
+    The dialog is built, shown, slept on, and closed entirely on a
+    background daemon thread. The caller returns immediately so
+    Kodi's Player callbacks (onPlayBackEnded etc.) don't stall and
+    audio passthrough is not renegotiated by an overlay repaint.
     """
-    dialog = WeTrakrNotification(title, message)
-    dialog.show()
-
-    def _close_after_delay():
+    def _run():
         try:
+            dialog = WeTrakrNotification(title, message)
+            dialog.show()
             xbmc.sleep(duration)
-        finally:
-            try:
-                dialog.close()
-            except Exception:
-                pass
+            dialog.close()
+        except Exception as e:
+            xbmc.log(
+                "[WeTrakr] notify error: {}".format(str(e)),
+                xbmc.LOGERROR,
+            )
 
-    t = threading.Thread(target=_close_after_delay, name='WeTrakrNotifyClose')
+    t = threading.Thread(target=_run, name='WeTrakrNotify')
     t.daemon = True
     t.start()
