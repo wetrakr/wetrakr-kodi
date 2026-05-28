@@ -4,12 +4,19 @@ notification.py — Branded WeTrakr notification popup.
 Shows a small notification in the top-right corner with the WeTrakr
 "We" logo, purple accent bar, and dark panel background.
 
-The entire popup lifecycle — building the WindowDialog, show(), the
-sleep, and close() — runs on a background daemon thread so the
-caller (typically an xbmc.Player callback) returns immediately.
-Building the dialog on the Player thread caused a brief A/V freeze
-on bitstream-passthrough setups when the 'watched' notification
-fired (the overlay repaint forced an audio mode renegotiation).
+Two render paths:
+
+* During video playback we use Kodi's native ``Dialog().notification``.
+  The native toast is drawn inside the current skin overlay, so it
+  does not push a new entry onto the window stack. On bitstream
+  passthrough setups (e.g. Vero 4K+ with E-AC3 passthrough) opening
+  a ``WindowDialog`` mid-playback forces an audio sink renegotiation,
+  which stalls the video stream for several seconds and ultimately
+  ends playback.
+
+* Outside of playback we still use the branded ``WeTrakrNotification``
+  ``WindowDialog`` — built, shown, slept on and closed entirely on a
+  background daemon thread so the caller never blocks.
 """
 
 import os
@@ -106,26 +113,65 @@ class WeTrakrNotification(xbmcgui.WindowDialog):
         self.close()
 
 
-def notify(title, message, duration=3000):
-    """Show a branded WeTrakr notification popup (fire-and-forget).
+def _native_notify(title, message, duration):
+    """Use Kodi's built-in ``Dialog().notification`` toast.
 
-    The dialog is built, shown, slept on, and closed entirely on a
-    background daemon thread. The caller returns immediately so
-    Kodi's Player callbacks (onPlayBackEnded etc.) don't stall and
-    audio passthrough is not renegotiated by an overlay repaint.
+    Renders inside the active skin overlay (no new window stack entry),
+    so it's safe to call during bitstream-passthrough playback without
+    forcing an audio sink renegotiation.
     """
-    def _run():
-        try:
-            dialog = WeTrakrNotification(title, message)
-            dialog.show()
-            xbmc.sleep(duration)
-            dialog.close()
-        except Exception as e:
-            xbmc.log(
-                "[WeTrakr] notify error: {}".format(str(e)),
-                xbmc.LOGERROR,
-            )
+    try:
+        icon = os.path.join(
+            xbmcaddon.Addon('script.wetrakr').getAddonInfo('path'),
+            'resources', 'media', 'we.png',
+        )
+        xbmcgui.Dialog().notification(title, message, icon, duration, False)
+    except Exception as e:
+        xbmc.log(
+            "[WeTrakr] native notify error: {}".format(str(e)),
+            xbmc.LOGERROR,
+        )
 
-    t = threading.Thread(target=_run, name='WeTrakrNotify')
+
+def _branded_notify(title, message, duration):
+    """Show the branded ``WindowDialog`` popup on a background thread."""
+    try:
+        dialog = WeTrakrNotification(title, message)
+        dialog.show()
+        xbmc.sleep(duration)
+        dialog.close()
+    except Exception as e:
+        xbmc.log(
+            "[WeTrakr] notify error: {}".format(str(e)),
+            xbmc.LOGERROR,
+        )
+
+
+def _is_video_playing():
+    try:
+        return xbmc.Player().isPlayingVideo()
+    except Exception:
+        return False
+
+
+def notify(title, message, duration=3000):
+    """Show a WeTrakr notification (fire-and-forget).
+
+    During video playback this delegates to Kodi's native toast to
+    avoid stalling the player on passthrough setups. Outside of
+    playback we render the branded dialog on a background thread.
+    """
+    if _is_video_playing():
+        t = threading.Thread(
+            target=_native_notify,
+            args=(title, message, duration),
+            name='WeTrakrNotifyNative',
+        )
+    else:
+        t = threading.Thread(
+            target=_branded_notify,
+            args=(title, message, duration),
+            name='WeTrakrNotify',
+        )
     t.daemon = True
     t.start()
