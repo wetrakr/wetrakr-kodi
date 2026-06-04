@@ -22,6 +22,25 @@
     <license>MIT</license>
     <website>https://wetrakr.com</website>
     <source>https://github.com/wetrakr/wetrakr-kodi</source>
+    <news>
+v1.1.9
+- Defer the "Now Playing" toast until playback crosses the 5% mark — the threshold WeTrakr uses to consider a session active and start scrobbling. The backend "playing" event is still sent at start; only the user-facing notification is deferred.
+
+v1.1.8
+- Use Kodi's native Dialog().notification during playback to avoid the WindowDialog that triggered an audio sink renegotiation under E-AC3 passthrough (Vero 4K+ stream stalls)
+
+v1.1.7
+- Build the branded notification dialog on a background thread so player callbacks never block the main thread
+
+v1.1.6
+- Dispatch all scrobble HTTP calls on a daemon thread to fix UI freezes on slower devices
+
+v1.1.5
+- Fall back to VideoPlayer.UniqueID infolabel when JSON-RPC uniqueid is empty (Jellyfin for Kodi, Plex Kodi Connect)
+
+v1.1.4
+- Ship episode payload even when the show isn't in Kodi's library
+    </news>
     <assets>
       <icon>icon.png</icon>
       <fanart>fanart.jpg</fanart>
