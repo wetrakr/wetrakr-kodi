@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <addon id="script.wetrakr"
        name="WeTrakr Scrobbler"
-       version="1.2.0"
+       version="1.2.1"
        provider-name="WeTrakr">
   <requires>
     <import addon="xbmc.python" version="3.0.1"/>
@@ -23,6 +23,9 @@
     <website>https://wetrakr.com</website>
     <source>https://github.com/wetrakr/wetrakr-kodi</source>
     <news>
+v1.2.1
+- Fix video stutter (1-2s freeze) when a notification appeared during playback. Rendering any toast mid-playback forces Kodi to repaint over the video, which stalls it on many devices (Android boxes, Nvidia Shield, Linux) regardless of audio passthrough. Notifications are now suppressed while a video is playing; the "Scrobbled" confirmation is shown once at the end of playback instead.
+
 v1.2.0
 - Recover automatically from a stale/orphaned token: if the server rejects a scrobble (HTTP 401/403), the add-on flags the saved token as invalid and re-runs the device-code login on next launch (or when playback stops), instead of silently sending events that get dropped. Prevents the "I see the Scrobbling popup but nothing shows up in WeTrakr" case after a skin/build change.
 
