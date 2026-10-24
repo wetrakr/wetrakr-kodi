@@ -24,31 +24,13 @@
     <source>https://github.com/wetrakr/wetrakr-kodi</source>
     <news>
 v1.2.2
-- Send the library scraper (TheTVDB or TMDB) and the episode air date with each episode scrobble, so WeTrakr can match shows that TheTVDB and TMDB number differently (e.g. The Great British Bake Off is season 17 on TheTVDB and season 10 on TMDB).
+- Send the library scraper (TheTVDB or TMDB) and the episode air date with episode scrobbles, so WeTrakr can match shows that TheTVDB and TMDB number differently (e.g. The Great British Bake Off: season 17 on TheTVDB, season 10 on TMDB).
 
 v1.2.1
-- Fix video stutter (1-2s freeze) when a notification appeared during playback. Rendering any toast mid-playback forces Kodi to repaint over the video, which stalls it on many devices (Android boxes, Nvidia Shield, Linux) regardless of audio passthrough. Notifications are now suppressed while a video is playing; the "Scrobbled" confirmation is shown once at the end of playback instead.
+- Fix video stutter when a notification appeared during playback. Notifications are now suppressed while a video plays; the "Scrobbled" confirmation is shown once at the end.
 
 v1.2.0
-- Recover automatically from a stale/orphaned token: if the server rejects a scrobble (HTTP 401/403), the add-on flags the saved token as invalid and re-runs the device-code login on next launch (or when playback stops), instead of silently sending events that get dropped. Prevents the "I see the Scrobbling popup but nothing shows up in WeTrakr" case after a skin/build change.
-
-v1.1.9
-- Defer the "Now Playing" toast until playback crosses the 5% mark — the threshold WeTrakr uses to consider a session active and start scrobbling. The backend "playing" event is still sent at start; only the user-facing notification is deferred.
-
-v1.1.8
-- Use Kodi's native Dialog().notification during playback to avoid the WindowDialog that triggered an audio sink renegotiation under E-AC3 passthrough (Vero 4K+ stream stalls)
-
-v1.1.7
-- Build the branded notification dialog on a background thread so player callbacks never block the main thread
-
-v1.1.6
-- Dispatch all scrobble HTTP calls on a daemon thread to fix UI freezes on slower devices
-
-v1.1.5
-- Fall back to VideoPlayer.UniqueID infolabel when JSON-RPC uniqueid is empty (Jellyfin for Kodi, Plex Kodi Connect)
-
-v1.1.4
-- Ship episode payload even when the show isn't in Kodi's library
+- Recover automatically from a stale token: on HTTP 401/403 the add-on re-runs the device-code login instead of silently dropping events.
     </news>
     <assets>
       <icon>icon.png</icon>
