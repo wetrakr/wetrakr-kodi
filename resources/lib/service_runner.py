@@ -1,8 +1,9 @@
 """
 service_runner.py — main loop of the WeTrakr Scrobbler background service.
 
-Handles the device-code authentication on first launch and then runs the
-periodic playback progress checks until Kodi requests an abort.
+Handles the device-code authentication on first launch, then runs the
+periodic playback progress checks and the library sync scheduler until Kodi
+requests an abort.
 """
 
 import xbmc
@@ -11,6 +12,8 @@ import xbmcaddon
 from resources.lib import auth
 from resources.lib.player import WeTrakrPlayer
 from resources.lib.notification import notify as _notify
+from resources.lib.sync_monitor import SyncMonitor
+from resources.lib.scheduler import Scheduler
 
 POLL_INTERVAL = 30  # seconds between progress checks
 
@@ -30,8 +33,14 @@ def run():
                 xbmc.LOGINFO
             )
 
-    monitor = xbmc.Monitor()
     player = WeTrakrPlayer()
+    # The monitor listens to library events (manual marks, scans, wake) and
+    # the scheduler decides when the library sync runs. The player tells them
+    # what is playing so its own plays are not uploaded twice.
+    monitor = SyncMonitor(player)
+    scheduler = Scheduler(monitor, player)
+    player.sync_monitor = monitor
+    player.scheduler = scheduler
     warned_reauth = False
 
     while not monitor.abortRequested():
@@ -52,6 +61,10 @@ def run():
             warned_reauth = False
             if player.isPlayingVideo() and player.current_item and not player.scrobbled:
                 player.check_progress()
+            try:
+                scheduler.tick()
+            except Exception as e:
+                xbmc.log("[WeTrakr] Scheduler tick error: {}".format(e), xbmc.LOGERROR)
 
         if monitor.waitForAbort(POLL_INTERVAL):
             break

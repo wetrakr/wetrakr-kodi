@@ -15,6 +15,17 @@
     <setting id="scrobble_threshold" type="number" label="Scrobble threshold (%)" default="80" />
   </category>
 
+  <category label="Library sync">
+    <setting id="sync_enabled" type="bool" label="Sync the Kodi library with WeTrakr" default="true" />
+    <setting id="sync_upload" type="bool" label="Send watched, ratings and progress to WeTrakr" default="true" enable="eq(-1,true)" />
+    <setting id="sync_download" type="bool" label="Apply WeTrakr watched, ratings and progress to Kodi" default="true" enable="eq(-2,true)" />
+    <setting id="sync_watchlist_tag" type="bool" label="Tag Plan to Watch titles as 'WeTrakr Watchlist'" default="true" enable="eq(-3,true)" />
+    <setting id="sync_exclude_plugin" type="bool" label="Skip add-on sources (Jellyfin, Plex...)" default="true" enable="eq(-4,true)" />
+    <setting id="resume_from_wetrakr" type="bool" label="Resume add-on streams where WeTrakr left off" default="true" />
+    <setting type="action" label="Sync now" action="RunScript(script.wetrakr, sync)" option="close" enable="eq(-6,true)" />
+    <setting type="action" label="Reset sync state" action="RunScript(script.wetrakr, sync_reset)" option="close" enable="eq(-7,true)" />
+  </category>
+
   <category label="Rating">
     <setting id="rate_after_movie" type="bool" label="Rate Movie after watching" default="true" />
     <setting id="rate_after_episode" type="bool" label="Rate Episode after watching" default="false" />
