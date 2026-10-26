@@ -235,6 +235,7 @@ class SyncEngine(object):
         if state.get("settings") is None:
             status = api.status()
             self._remember_settings(state, status.get("settings"), status.get("max_batch"))
+            self._note_sync_request(state, status)
 
         if dialog:
             dialog.update(5, message="Reading the Kodi library")
@@ -267,6 +268,18 @@ class SyncEngine(object):
             state["settings"] = settings
         if max_batch:
             state["max_batch"] = max(1, min(int(max_batch), 1000))
+
+    def _note_sync_request(self, state, payload):
+        """"Sync now" pressed in the WeTrakr web: WeTrakr cannot reach the
+        device, so the request rides on /status and /changes. Each request is
+        honoured once, with a full pass right after this one."""
+        requested = (payload or {}).get("sync_requested_at")
+        if not requested or requested == state.get("sync_request_seen"):
+            return
+        state["sync_request_seen"] = requested
+        if lib.iso_to_ts(requested) and lib.iso_to_ts(requested) > (state.get("last_full_at") or 0):
+            _log("full sync requested from the web at {}".format(requested))
+            self.monitor.full_requested = True
 
     def _sync_settings(self, state):
         return (state.get("settings") or {}).get("sync") or {}
@@ -507,6 +520,7 @@ class SyncEngine(object):
                     return self._pull(api, state, True, dialog)
                 raise
             self._remember_settings(state, changes.get("settings"), changes.get("max_batch"))
+            self._note_sync_request(state, changes)
             sync = self._sync_settings(state)
             if changes.get("unchanged"):
                 state["cursor_since"] = changes.get("next_since") or state["cursor_since"]

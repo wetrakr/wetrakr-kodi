@@ -52,6 +52,7 @@ def empty():
         "planning": [],             # WeTrakr Planning title keys ("movie:tmdb:1")
         "tagged": [],               # items that carry OUR watchlist tag
         "in_progress": {},          # title key -> {percent, position_ms, updated_at}
+        "sync_request_seen": None,  # last "Sync now" from the web already honoured
     }
 
 

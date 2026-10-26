@@ -109,7 +109,7 @@ class SyncMonitor(xbmc.Monitor):
             elif method == "System.OnWake":
                 self.check_requested = True
             elif method == "Other.wetrakr_sync_now":
-                self.full_requested = True
+                self.full_requested = "local"
             elif method == "Other.wetrakr_sync_reset":
                 self.reset_requested = True
         except Exception as e:

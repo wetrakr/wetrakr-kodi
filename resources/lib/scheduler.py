@@ -82,8 +82,11 @@ class Scheduler(object):
         now = time.time()
 
         if self.monitor.full_requested:
+            # Dialog only when asked from this Kodi ("Sync now" in the add-on
+            # settings); a request from the web runs quietly.
+            local = self.monitor.full_requested == "local"
             self.monitor.full_requested = False
-            self._start(sync_engine.MODE_FULL, resnapshot=True, with_dialog=True)
+            self._start(sync_engine.MODE_FULL, resnapshot=True, with_dialog=local)
             return
         if self.monitor.resnapshot_requested:
             self.monitor.resnapshot_requested = False
