@@ -11,9 +11,13 @@ Item fields (short on purpose, the file holds one row per library item):
   pc   playcount          lp   lastplayed (UTC ISO)   pos  resume position (s)
   ur   userrating         wpos resume written by the sync (from WeTrakr)
   unw  unmarked in Kodi on purpose: WeTrakr's watched does not re-mark it
+  fp   fingerprint of the file (crc32 of its path): Kodi REUSES database ids
+       after a clean or a re-scan, so a row whose fingerprint does not match
+       belongs to another item and is dropped (see get_item)
 """
 
 import json
+import zlib
 import os
 import threading
 
@@ -95,8 +99,23 @@ def item_key(kind, dbid):
     return {"movie": "m", "episode": "e", "tvshow": "s"}[kind] + str(dbid)
 
 
-def get_item(state, kind, dbid):
-    return state["items"].get(item_key(kind, dbid)) or {}
+def fingerprint(item):
+    """crc32 of the item's file path, or None when Kodi gives no path."""
+    f = (item or {}).get("file")
+    if not f:
+        return None
+    return zlib.crc32(str(f).encode("utf-8")) & 0xffffffff
+
+
+def get_item(state, kind, dbid, fp=None):
+    """Last synced state of a library item. With `fp`, a row recorded for a
+    different file (Kodi reused the dbid) is forgotten and {} returned."""
+    key = item_key(kind, dbid)
+    st = state["items"].get(key) or {}
+    if st and fp is not None and st.get("fp") != fp:
+        state["items"].pop(key, None)
+        return {}
+    return st
 
 
 def set_item(state, kind, dbid, fields):

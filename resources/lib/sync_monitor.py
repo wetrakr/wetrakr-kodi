@@ -188,6 +188,7 @@ class SyncMonitor(xbmc.Monitor):
             "ur": int(item.get("userrating") or 0),
             "pos": int(pos),
             "unw": playcount == 0,
+            "fp": store.fingerprint(item),
         }
         store.set_item(state, kind, dbid, fields)
         store.save(state)

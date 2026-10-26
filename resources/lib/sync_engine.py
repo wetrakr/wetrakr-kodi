@@ -346,8 +346,8 @@ class SyncEngine(object):
         if lib.is_excluded(it, self._cfg["exclude_plugin"]):
             return
         dbid = it["movieid"] if kind == "movie" else it["episodeid"]
-        st = store.get_item(state, kind, dbid)
         data = self._item_data(it)
+        st = store.get_item(state, kind, dbid, data["fp"])
         payload = self._import_item(kind, it, shows)
         if payload is None:
             return
@@ -390,12 +390,13 @@ class SyncEngine(object):
             "ur": _int(it.get("userrating")),
             "pos": int(pos),
             "total": int(total) or _int(it.get("runtime")),
+            "fp": store.fingerprint(it),
         }
 
     @staticmethod
     def _remember(state, kind, dbid, data):
-        st = store.get_item(state, kind, dbid)
-        fields = {"pc": data["pc"], "lp": data["lp"], "ur": data["ur"], "pos": data["pos"]}
+        st = store.get_item(state, kind, dbid, data.get("fp"))
+        fields = {"pc": data["pc"], "lp": data["lp"], "ur": data["ur"], "pos": data["pos"], "fp": data.get("fp")}
         # Played -> not played seen in Kodi: on purpose (the sync only unmarks
         # from _apply_row, which forgets the flag right after).
         if st.get("pc", 0) > 0 and data["pc"] == 0:
@@ -564,7 +565,7 @@ class SyncEngine(object):
             if lib.is_excluded(item, self._cfg["exclude_plugin"]):
                 continue
             data = self._item_data(item)
-            st = store.get_item(state, kind, dbid)
+            st = store.get_item(state, kind, dbid, data["fp"])
             fields = {}
             unwatch_from_wetrakr = False
 
@@ -662,7 +663,7 @@ class SyncEngine(object):
                 data = self._item_data(item)
                 if data["pc"] > 0:
                     continue
-                st = store.get_item(state, kind, dbid)
+                st = store.get_item(state, kind, dbid, data["fp"])
                 total = data["total"] or _int(row.get("runtime_s"))
                 if row.get("position_ms"):
                     position = int(row["position_ms"]) // 1000
