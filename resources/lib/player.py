@@ -161,8 +161,7 @@ class WeTrakrPlayer(xbmc.Player):
                 api = self._get_api(settings)
                 if api:
                     payload = utils.build_payload(
-                        "playing", item, self.current_show, progress=0.0
-                    )
+                        "playing", item, self.current_show, progress=0.0, runtime=self.total_time)
                     self.playing_sent = True
                     _dispatch_async(
                         api.send_event, payload, debug=settings["debug"]
@@ -209,8 +208,7 @@ class WeTrakrPlayer(xbmc.Player):
                         progress = self._get_progress()
                         payload = utils.build_payload(
                             "playing", self.current_item, self.current_show,
-                            progress=progress
-                        )
+                            progress=progress, runtime=self.total_time)
                         _dispatch_async(
                             api.send_event, payload, debug=settings["debug"]
                         )
@@ -267,8 +265,7 @@ class WeTrakrPlayer(xbmc.Player):
                 if api:
                     payload = utils.build_payload(
                         "playing", self.current_item, self.current_show,
-                        progress=progress
-                    )
+                        progress=progress, runtime=self.total_time)
                     _dispatch_async(
                         api.send_event, payload, debug=settings["debug"]
                     )
@@ -407,8 +404,7 @@ class WeTrakrPlayer(xbmc.Player):
             return
 
         payload = utils.build_payload(
-            "paused", self.current_item, self.current_show, progress=progress
-        )
+            "paused", self.current_item, self.current_show, progress=progress, runtime=self.total_time)
 
         title = self.current_item.get("title", "Unknown")
         if self.media_type == "episode":
@@ -442,8 +438,7 @@ class WeTrakrPlayer(xbmc.Player):
             return
 
         payload = utils.build_payload(
-            "scrobble", self.current_item, self.current_show, progress=progress
-        )
+            "scrobble", self.current_item, self.current_show, progress=progress, runtime=self.total_time)
 
         title = self.current_item.get("title", "Unknown")
         if self.media_type == "episode":

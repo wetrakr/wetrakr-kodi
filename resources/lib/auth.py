@@ -18,6 +18,7 @@ import xbmcgui
 import xbmcaddon
 
 from resources.lib.notification import notify as _notify
+from resources.lib import utils
 
 try:
     from urllib.request import Request, urlopen
@@ -114,7 +115,7 @@ def _download_qr(url):
 
     try:
         req = Request(qr_url)
-        req.add_header('User-Agent', 'WeTrakr-Kodi/1.0.0')
+        req.add_header('User-Agent', utils.user_agent())
 
         try:
             import ssl
@@ -300,7 +301,7 @@ def request_device_code():
 
     req = Request(url, data=b'{}')
     req.add_header('Content-Type', 'application/json')
-    req.add_header('User-Agent', 'WeTrakr-Kodi/1.0.0')
+    req.add_header('User-Agent', utils.user_agent())
 
     try:
         if ctx:
@@ -327,7 +328,7 @@ def _poll_once(device_code):
     try:
         req = Request(url, data=body)
         req.add_header('Content-Type', 'application/json')
-        req.add_header('User-Agent', 'WeTrakr-Kodi/1.0.0')
+        req.add_header('User-Agent', utils.user_agent())
 
         try:
             import ssl
