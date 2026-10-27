@@ -41,6 +41,7 @@ import xbmcgui
 from resources.lib import library as lib
 from resources.lib import sync_state as store
 from resources.lib import utils
+from resources.lib import widgets
 from resources.lib.sync_api import SyncApi, InvalidToken, ApiError
 
 MODE_CHECK = "check"
@@ -276,6 +277,8 @@ class SyncEngine(object):
         state["last_result"] = str(res)
         store.save(state)
         _log("{} pass: {}".format(mode, res), xbmc.LOGINFO if (mode == MODE_FULL or res.changed) else xbmc.LOGDEBUG)
+        if res.uploaded or res.applied:
+            widgets.invalidate()
 
     @staticmethod
     def _remember_settings(state, settings, max_batch):

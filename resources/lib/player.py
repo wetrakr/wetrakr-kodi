@@ -21,6 +21,7 @@ import xbmcgui
 
 from resources.lib.api import WeTrakrAPI
 from resources.lib import utils
+from resources.lib import widgets
 from resources.lib import rating as rating_mod
 from resources.lib.notification import notify as _notify
 
@@ -504,6 +505,8 @@ class WeTrakrPlayer(xbmc.Player):
             ok = api.send_event(payload, debug=settings["debug"])
             if ok:
                 self._log("Scrobbled: {} ({:.0f}%)".format(title, progress))
+                # The next episode of this show changed in WeTrakr.
+                widgets.invalidate()
             else:
                 self._log("Scrobble failed: {}".format(title), xbmc.LOGWARNING)
 

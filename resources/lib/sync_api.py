@@ -7,6 +7,8 @@ sync_api.py — HTTP client for the library sync endpoints
   GET  /integrations/kodi/import/<job_id>        batch progress
   GET  /integrations/kodi/snapshot?section=&cursor=
   GET  /integrations/kodi/changes?since=&full=1  what changed in WeTrakr
+  GET  /integrations/kodi/lists                  lists mirrored as tags
+  GET  /integrations/kodi/next-episodes?limit=   Next Episodes widget
 """
 
 import json
@@ -127,6 +129,10 @@ class SyncApi(object):
     def lists(self):
         """WeTrakr lists the user mirrors in Kodi: {rev, lists: [{id, name, items}]}."""
         return self._request("GET", "/lists")
+
+    def next_episodes(self, limit=50):
+        """WeTrakr Next Episodes: {items: [{show, episode, status, last_watched_at}]}."""
+        return self._request("GET", "/next-episodes", query={"limit": limit})
 
     def changes(self, since, full=False):
         q = {"since": since}

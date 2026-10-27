@@ -26,6 +26,12 @@
     <setting type="action" label="Reset sync state" action="RunScript(script.wetrakr, sync_reset)" option="close" enable="eq(-7,true)" />
   </category>
 
+  <category label="Widgets">
+    <setting type="lsep" label="Add 'WeTrakr Scrobbler > Next Episodes' as a widget from your skin settings" />
+    <setting id="widget_library_only" type="bool" label="Next Episodes: only episodes in the Kodi library" default="false" />
+    <setting id="widget_tmdb_helper" type="bool" label="Play the other episodes with TMDb Helper" default="true" enable="eq(-1,false)" />
+  </category>
+
   <category label="Rating">
     <setting id="rate_after_movie" type="bool" label="Rate Movie after watching" default="true" />
     <setting id="rate_after_episode" type="bool" label="Rate Episode after watching" default="false" />

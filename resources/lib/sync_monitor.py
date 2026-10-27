@@ -179,6 +179,9 @@ class SyncMonitor(xbmc.Monitor):
         payload = utils.build_payload(event, item, show, progress=100.0 if playcount > 0 else 0.0)
         ok = WeTrakrAPI(addon.getSetting("api_url") or "https://api.wetrakr.com", token).send_event(payload, debug=addon.getSetting("debug") == "true")
         _log("{} {} #{} -> {}".format(event, kind, dbid, "sent" if ok else "FAILED"))
+        if ok and kind == "episode":
+            from resources.lib import widgets
+            widgets.invalidate()
 
         state = store.load()
         pos, total = (item.get("resume") or {}).get("position") or 0, 0
