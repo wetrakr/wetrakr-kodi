@@ -124,6 +124,10 @@ class SyncApi(object):
             q["cursor"] = cursor
         return self._request("GET", "/snapshot", query=q)
 
+    def lists(self):
+        """WeTrakr lists the user mirrors in Kodi: {rev, lists: [{id, name, items}]}."""
+        return self._request("GET", "/lists")
+
     def changes(self, since, full=False):
         q = {"since": since}
         if full:

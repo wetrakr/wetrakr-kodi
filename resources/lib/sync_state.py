@@ -57,6 +57,10 @@ def empty():
         "tagged": [],               # items that carry OUR watchlist tag
         "in_progress": {},          # title key -> {percent, position_ms, updated_at}
         "sync_request_seen": None,  # last "Sync now" from the web already honoured
+        "lists_rev": None,          # revision of the WeTrakr lists last applied
+        "lists": {},                # list id -> {name, tag, keys: [title keys]}
+        "list_tags": [],            # every "WeTrakr: ..." tag this sync ever wrote
+        "xsp_files": [],            # smart playlists this sync created
     }
 
 

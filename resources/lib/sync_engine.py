@@ -27,9 +27,12 @@ Same design as the official Emby plugin (SyncEngine.cs); the semantics of
 "who wins" are identical so both behave the same for a user.
 """
 
+import os
 import random
+import re
 import threading
 import time
+from xml.sax.saxutils import escape as xml_escape
 
 import xbmc
 import xbmcaddon
@@ -45,6 +48,9 @@ MODE_LOCAL = "local"
 MODE_FULL = "full"
 
 WATCHLIST_TAG = "WeTrakr Watchlist"
+LIST_TAG_PREFIX = "WeTrakr: "
+PLAYLISTS_DIR = "special://profile/playlists/video/"
+XSP_PREFIX = "WeTrakr - "
 SNAPSHOT_SECTIONS = ("tracks", "ratings")
 REPLAY_GAP_S = 60          # a later lastplayed past this gap is a new play
 RESUME_MIN_DIFF_S = 30
@@ -230,12 +236,14 @@ class SyncEngine(object):
         state = store.load()
         api = SyncApi(cfg["api_url"], cfg["token"])
         self._cfg = cfg
+        self._seen_lists_rev = None
         self._stop = lambda: xbmc.Monitor().abortRequested()
 
         if state.get("settings") is None:
             status = api.status()
             self._remember_settings(state, status.get("settings"), status.get("max_batch"))
             self._note_sync_request(state, status)
+            self._note_lists_rev(status)
 
         if dialog:
             dialog.update(5, message="Reading the Kodi library")
@@ -254,6 +262,13 @@ class SyncEngine(object):
                 res.progress = self._apply_progress(state, pull["in_progress"])
             if pull["planning_changed"] or mode == MODE_FULL:
                 res.tagged = self._sync_watchlist_tag(state)
+            rev = self._seen_lists_rev
+            if rev is not None and (rev != state.get("lists_rev") or mode == MODE_FULL):
+                res.tagged += self._sync_lists(api, state, rev)
+            # The playlists depend on which items carry each tag: only when
+            # the library index is loaded (an `unchanged` check skips it).
+            if self.index.built_at:
+                self._sync_playlists(state)
 
         if mode == MODE_FULL:
             state["last_full_at"] = time.time()
@@ -268,6 +283,11 @@ class SyncEngine(object):
             state["settings"] = settings
         if max_batch:
             state["max_batch"] = max(1, min(int(max_batch), 1000))
+
+    def _note_lists_rev(self, payload):
+        """Remember the lists revision WeTrakr sent ('' = no lists chosen)."""
+        if isinstance(payload, dict) and "lists_rev" in payload and payload["lists_rev"] is not None:
+            self._seen_lists_rev = payload["lists_rev"]
 
     def _note_sync_request(self, state, payload):
         """"Sync now" pressed in the WeTrakr web: WeTrakr cannot reach the
@@ -522,6 +542,7 @@ class SyncEngine(object):
                 raise
             self._remember_settings(state, changes.get("settings"), changes.get("max_batch"))
             self._note_sync_request(state, changes)
+            self._note_lists_rev(changes)
             sync = self._sync_settings(state)
             if changes.get("unchanged"):
                 state["cursor_since"] = changes.get("next_since") or state["cursor_since"]
@@ -712,6 +733,133 @@ class SyncEngine(object):
             store.set_item(state, kind, dbid, {"wpos": False})
         writer.flush()
         return written
+
+    # ------------------------------------------------------------------
+    # WeTrakr lists as tags (1.3.1)
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _list_tag(name):
+        name = re.sub(r"\s+", " ", str(name or "")).strip()[:80] or "List"
+        return LIST_TAG_PREFIX + name
+
+    def _sync_lists(self, api, state, rev):
+        """Movies and shows of the WeTrakr lists the user chose (in the web)
+        carry a "WeTrakr: <list>" tag. Only tags this sync wrote are ever
+        removed: a renamed or deselected list loses its old tag everywhere."""
+        if rev:
+            data = api.lists()
+            lists = data.get("lists") or []
+            rev = data.get("rev", rev)
+        else:
+            lists = []
+        self._ensure_index()
+
+        wanted = {}       # item key -> set of list tags
+        new_state = {}
+        for l in lists:
+            tag = self._list_tag(l.get("name"))
+            keys = []
+            for it in l.get("items") or []:
+                for kind, dbid, _item in self.index.find(it.get("type"), it.get("ids")):
+                    key = store.item_key(kind, dbid)
+                    wanted.setdefault(key, set()).add(tag)
+                    keys.append(key)
+            new_state[str(l.get("id"))] = {"name": l.get("name"), "tag": tag, "count": len(keys)}
+
+        managed = set(state.get("list_tags") or [])
+        managed.update(v["tag"] for v in new_state.values())
+        writer = lib.Writer(expect=self.monitor.expect)
+        changed = 0
+        for kind, table, dbid_key in (("movie", self.index.movies, "movieid"), ("tvshow", self.index.shows, "tvshowid")):
+            for dbid, item in table.items():
+                if kind == "movie" and lib.is_excluded(item, self._cfg["exclude_plugin"]):
+                    continue
+                current = list(item.get("tag") or [])
+                keep = [t for t in current if t not in managed]
+                target = keep + sorted(wanted.get(store.item_key(kind, dbid), ()))
+                if sorted(target) == sorted(current):
+                    continue
+                item["tag"] = target
+                if kind == "movie":
+                    writer.set_movie(dbid, {"tag": target})
+                else:
+                    writer.set_show(dbid, {"tag": target})
+                changed += 1
+        writer.flush()
+
+        state["lists"] = new_state
+        state["list_tags"] = sorted(v["tag"] for v in new_state.values())
+        state["lists_rev"] = rev
+        _log("lists: {} list(s), {} item(s) retagged".format(len(new_state), changed))
+        return changed
+
+    # ------------------------------------------------------------------
+    # Smart playlists (Videos › Playlists, and skin widgets)
+    # ------------------------------------------------------------------
+
+    def _sync_playlists(self, state):
+        """One smart playlist per tag this sync manages (Planning and each
+        WeTrakr list), split by movies / shows when the tag is on both. Only
+        files this sync created are ever deleted."""
+        try:
+            import xbmcvfs
+            folder = xbmcvfs.translatePath(PLAYLISTS_DIR)
+        except Exception:
+            return
+        if not os.path.isdir(folder):
+            try:
+                os.makedirs(folder)
+            except OSError:
+                return
+
+        tags = []
+        sync = self._sync_settings(state)
+        if sync.get("push_planning", True) and self._cfg["watchlist_tag"]:
+            tags.append((WATCHLIST_TAG, "Watchlist"))
+        for v in (state.get("lists") or {}).values():
+            tags.append((v["tag"], v["tag"][len(LIST_TAG_PREFIX):]))
+
+        idx = self.index
+        wanted = {}
+        for tag, title in tags:
+            has_movies = any(tag in (m.get("tag") or []) for m in idx.movies.values())
+            has_shows = any(tag in (s.get("tag") or []) for s in idx.shows.values())
+            kinds = [k for k, present in (("movies", has_movies), ("tvshows", has_shows)) if present]
+            for kind in kinds:
+                label = title if len(kinds) == 1 else "{} ({})".format(title, "Movies" if kind == "movies" else "Shows")
+                fname = XSP_PREFIX + re.sub(r'[\\/:*?"<>|]+', "-", label).strip()[:90] + ".xsp"
+                wanted[fname] = self._xsp(kind, XSP_PREFIX.strip(" -") + ": " + label, tag)
+
+        for fname, body in wanted.items():
+            path = os.path.join(folder, fname)
+            try:
+                old = open(path, "r").read() if os.path.exists(path) else None
+                if old != body:
+                    with open(path, "w") as fh:
+                        fh.write(body)
+            except (IOError, OSError) as e:
+                _log("playlist {} not written: {}".format(fname, e), xbmc.LOGWARNING)
+        for fname in set(state.get("xsp_files") or []) - set(wanted):
+            try:
+                os.remove(os.path.join(folder, fname))
+            except OSError:
+                pass
+        state["xsp_files"] = sorted(wanted)
+
+    @staticmethod
+    def _xsp(kind, name, tag):
+        return (
+            '<?xml version="1.0" encoding="UTF-8" standalone="yes" ?>\n'
+            '<smartplaylist type="{kind}">\n'
+            '    <name>{name}</name>\n'
+            '    <match>all</match>\n'
+            '    <rule field="tag" operator="is">\n'
+            '        <value>{tag}</value>\n'
+            '    </rule>\n'
+            '    <order direction="ascending">sorttitle</order>\n'
+            '</smartplaylist>\n'
+        ).format(kind=kind, name=xml_escape(name), tag=xml_escape(tag))
 
     # ------------------------------------------------------------------
     # Watchlist tag (Planning)
