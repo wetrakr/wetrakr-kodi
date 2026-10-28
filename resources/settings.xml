@@ -7,6 +7,7 @@
     <!-- Set to "true" by api.py when the server rejects the token (HTTP 401/403);
          is_authenticated() then returns False so the service forces a re-login. -->
     <setting id="auth_invalid" type="bool" label="Auth invalid" default="false" visible="false" />
+    <setting type="action" label="Connect to WeTrakr" action="RunScript(script.wetrakr, login)" option="close" />
   </category>
 
   <category label="Scrobbling">
