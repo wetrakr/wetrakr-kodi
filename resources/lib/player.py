@@ -6,6 +6,13 @@ Callbacks:
   onAVStarted()       — media stream ready → send 'playing' event
   onPlayBackEnded()   — file finished naturally → send 'scrobble' event
   onPlayBackStopped() — user stopped playback → send 'scrobble' if threshold met
+  onPlayBackSeek*()   — user jumped → 'playing' on the next progress check
+
+While playing, the progress check runs every 30 s (it has to catch the
+scrobble threshold on time) but only sends a 'playing' update every
+PLAYING_UPDATE_INTERVAL_S, when playback first crosses 5% (the Now Playing
+threshold) or after a seek. WeTrakr extrapolates progress from the last
+update, so a tick every 30 s only cost requests (120 per hour of video).
 
 All outbound HTTP calls are dispatched on a daemon thread so Kodi's player
 callbacks return immediately — otherwise the UI freezes for the duration of
@@ -24,6 +31,12 @@ from resources.lib import utils
 from resources.lib import widgets
 from resources.lib import rating as rating_mod
 from resources.lib.notification import notify as _notify
+
+PLAYING_UPDATE_INTERVAL_S = 5 * 60
+NOW_PLAYING_PERCENT = 5.0
+# A position this far from where the clock says it should be is a seek that
+# Kodi did not report (some players skip onPlayBackSeek).
+SEEK_DRIFT_S = 60
 
 
 def _dispatch_async(target, *args, **kwargs):
@@ -75,6 +88,10 @@ class WeTrakrPlayer(xbmc.Player):
         self.media_type = None
         self.last_progress = 0.0
         self.poster_art = None
+        # Last 'playing' update sent: wall clock and playback position (s).
+        self._last_playing_at = 0.0
+        self._last_playing_pos = 0.0
+        self._seek_pending = False
         # Title of a scrobble whose "Scrobbled" toast is deferred until playback
         # ends (see _send_scrobble / _flush_scrobble_notify). None = nothing
         # pending. Deferring avoids the mid-playback repaint stutter.
@@ -179,6 +196,7 @@ class WeTrakrPlayer(xbmc.Player):
                     payload = utils.build_payload(
                         "playing", item, self.current_show, progress=0.0, runtime=self.total_time)
                     self.playing_sent = True
+                    self._note_playing_sent()
                     _dispatch_async(
                         api.send_event, payload, debug=settings["debug"]
                     )
@@ -218,19 +236,19 @@ class WeTrakrPlayer(xbmc.Player):
         self._log("onPlayBackResumed triggered")
         try:
             if self.current_item and not self.scrobbled:
-                settings = self._get_settings()
-                if settings["track_playing"]:
-                    api = self._get_api(settings)
-                    if api:
-                        progress = self._get_progress()
-                        payload = utils.build_payload(
-                            "playing", self.current_item, self.current_show,
-                            progress=progress, runtime=self.total_time)
-                        _dispatch_async(
-                            api.send_event, payload, debug=settings["debug"]
-                        )
+                self._send_playing(self._get_progress())
         except Exception as e:
             self._log("onPlayBackResumed error: {}".format(str(e)), xbmc.LOGERROR)
+
+    def onPlayBackSeek(self, time, seekOffset):
+        """User jumped: the next progress check (<= 30 s) sends the new
+        position. Not sent here: skipping ahead fires several seeks in a row."""
+        if self.current_item and not self.scrobbled:
+            self._seek_pending = True
+
+    def onPlayBackSeekChapter(self, chapter):
+        if self.current_item and not self.scrobbled:
+            self._seek_pending = True
 
     def onPlayBackStopped(self):
         """Called when the user stops playback."""
@@ -302,22 +320,21 @@ class WeTrakrPlayer(xbmc.Player):
         try:
             if not self.isPlayingVideo():
                 return
+            # Paused: onPlayBackPaused already told WeTrakr, and a 'playing'
+            # here would undo it. onPlayBackResumed sends the next one.
+            if xbmc.getCondVisibility("Player.Paused"):
+                return
 
             progress = self._get_progress()
             self.last_progress = progress
             settings = self._get_settings()
 
-            # Send "playing" update with current progress every 30s (async)
-            if settings["track_playing"]:
-                api = self._get_api(settings)
-                if api:
-                    payload = utils.build_payload(
-                        "playing", self.current_item, self.current_show,
-                        progress=progress, runtime=self.total_time)
-                    _dispatch_async(
-                        api.send_event, payload, debug=settings["debug"]
-                    )
-                    self._log("Playing update dispatched: {:.1f}%".format(progress))
+            # "playing" update with the current progress, only when WeTrakr
+            # needs it (see the module docstring).
+            reason = self._playing_update_reason(progress)
+            if reason:
+                self._send_playing(progress, settings)
+                self._log("Playing update dispatched ({}): {:.1f}%".format(reason, progress))
 
             # Show the "started scrobbling" toast once playback crosses 5% —
             # that's the threshold WeTrakr uses to consider a session active.
@@ -430,6 +447,52 @@ class WeTrakrPlayer(xbmc.Player):
             _notify("WeTrakr", "Rated {}/10".format(rating_value))
         except Exception as e:
             self._log("Rating error: {}".format(str(e)), xbmc.LOGWARNING)
+
+    def _note_playing_sent(self):
+        import time
+        self._last_playing_at = time.time()
+        self._seek_pending = False
+        try:
+            self._last_playing_pos = self.getTime()
+        except Exception:
+            self._last_playing_pos = 0.0
+
+    def _send_playing(self, progress, settings=None):
+        """Send a 'playing' update (async). Returns True if dispatched."""
+        if settings is None:
+            settings = self._get_settings()
+        if not settings["track_playing"]:
+            return False
+        api = self._get_api(settings)
+        if not api:
+            return False
+        payload = utils.build_payload(
+            "playing", self.current_item, self.current_show,
+            progress=progress, runtime=self.total_time)
+        self._note_playing_sent()
+        _dispatch_async(api.send_event, payload, debug=settings["debug"])
+        return True
+
+    def _playing_update_reason(self, progress):
+        """Why a 'playing' update is due now, or None."""
+        import time
+        now = time.time()
+        if not self._last_playing_at:
+            return "first"
+        if self._seek_pending:
+            return "seek"
+        last_percent = (self._last_playing_pos / self.total_time * 100.0) if self.total_time else 0.0
+        if last_percent < NOW_PLAYING_PERCENT <= progress:
+            return "now playing"
+        if now - self._last_playing_at >= PLAYING_UPDATE_INTERVAL_S:
+            return "interval"
+        try:
+            expected = self._last_playing_pos + (now - self._last_playing_at)
+            if abs(self.getTime() - expected) > SEEK_DRIFT_S:
+                return "jump"
+        except Exception:
+            pass
+        return None
 
     def _get_progress(self):
         """Calculate playback progress as a percentage (0-100)."""
