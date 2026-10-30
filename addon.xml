@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <addon id="script.wetrakr"
        name="WeTrakr Scrobbler"
-       version="1.3.4"
+       version="1.3.5"
        provider-name="WeTrakr">
   <requires>
     <import addon="xbmc.python" version="3.0.1"/>
@@ -27,15 +27,15 @@
     <website>https://wetrakr.com</website>
     <source>https://github.com/wetrakr/wetrakr-kodi</source>
     <news>
+v1.3.5
+- New WeTrakr look: new icon, fanart and logo in the login window.
+
 v1.3.4
 - Fewer requests while playing: the progress update goes every 5 minutes (and right after a seek) instead of every 30 seconds. Scrobbles, pauses and Now Playing work as before.
 
 v1.3.3
 - Login: waits for the network after Kodi starts and retries on its own, instead of showing "Could not connect to server". New Connect button in Settings > General.
 - Fix: a rejected token could reopen the login every 30 seconds while WeTrakr was unreachable.
-
-v1.3.2
-- Next Episodes widget: your WeTrakr Next Episodes (including what you watched in other apps) as a skin widget, from Video add-ons > WeTrakr Scrobbler. Episodes in the library play the local file; the others open with TMDb Helper. Settings > Widgets.
     </news>
     <assets>
       <icon>icon.png</icon>
