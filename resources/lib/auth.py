@@ -244,7 +244,7 @@ class AuthDialog(xbmcgui.WindowDialog):
             "resources", "media", "logo.png"
         )
         logo_w = int(dw * 0.50)
-        logo_h = int(logo_w / 3.54)  # actual aspect ratio 5337:1506
+        logo_h = int(logo_w * 261 / 1200)  # logo.png is 1200x261
         logo_x = (w - logo_w) // 2
         self.addControl(xbmcgui.ControlImage(logo_x, y, logo_w, logo_h, logo_path))
         y += logo_h + int(h * 0.015)
