@@ -106,6 +106,7 @@ class WeTrakrPlayer(xbmc.Player):
             "threshold": int(addon.getSetting("scrobble_threshold") or "80"),
             "track_playing": addon.getSetting("track_playing") == "true",
             "track_watched": addon.getSetting("track_watched") == "true",
+            "library_only": addon.getSetting("scrobble_library_only") == "true",
             "debug": addon.getSetting("debug") == "true",
             # Notification toggles — default ON for backwards compatibility.
             "notify_playing": addon.getSetting("notify_playing") != "false",
@@ -125,6 +126,16 @@ class WeTrakrPlayer(xbmc.Player):
 
     def _log(self, msg, level=xbmc.LOGINFO):
         xbmc.log("[WeTrakr] {}".format(msg), level)
+
+    @staticmethod
+    def _is_library_item(item):
+        """True when Kodi plays it from its video library (it has a dbid)."""
+        try:
+            if int(item.get("id") or 0) > 0:
+                return True
+        except (TypeError, ValueError):
+            pass
+        return utils._parse_int(xbmc.getInfoLabel("VideoPlayer.DBID")) is not None
 
     # -----------------------------------------------------------------
     # Callbacks
@@ -164,6 +175,14 @@ class WeTrakrPlayer(xbmc.Player):
                 self._log("Ignoring non-video type: {}".format(item_type))
                 return
 
+            # Off by default. With a video add-on that scrobbles to WeTrakr on
+            # its own (Red Light, POV...), its streams would count twice: this
+            # leaves them to that add-on and keeps the library files here.
+            settings = self._get_settings()
+            if settings["library_only"] and not self._is_library_item(item):
+                self._log("Not a library item, scrobble_library_only is on: ignoring")
+                return
+
             self.current_item = item
             self.media_type = item_type
             self.total_time = self.getTotalTime() if self.isPlayingVideo() else 0
@@ -176,8 +195,6 @@ class WeTrakrPlayer(xbmc.Player):
             if item_type == "episode":
                 tvshow_id = item.get("tvshowid", -1)
                 self.current_show = utils.get_tvshow_details(tvshow_id)
-
-            settings = self._get_settings()
 
             self._maybe_resume_from_wetrakr(item, settings)
 

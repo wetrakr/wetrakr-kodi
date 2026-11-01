@@ -14,6 +14,7 @@
     <setting id="track_watched" type="bool" label="Mark as watched" default="true" />
     <setting id="track_playing" type="bool" label="Send 'now playing' event" default="true" />
     <setting id="scrobble_threshold" type="number" label="Scrobble threshold (%)" default="80" />
+    <setting id="scrobble_library_only" type="bool" label="Only scrobble Kodi library files (leave add-on streams to their own add-on)" default="false" />
   </category>
 
   <category label="Library sync">
