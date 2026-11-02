@@ -39,6 +39,11 @@
     <setting id="rate_after_episode" type="bool" label="Rate Episode after watching" default="false" />
   </category>
 
+  <category label="Context menu">
+    <setting id="context_menu_enabled" type="bool" label="Show the WeTrakr entry in the context menu" default="true" />
+    <setting id="context_ask_date" type="bool" label="Ask for the date when marking watched or rating" default="true" enable="eq(-1,true)" />
+  </category>
+
   <category label="Notifications">
     <setting id="notify_playing" type="bool" label="Show 'Now Playing' notification" default="true" />
     <setting id="notify_paused" type="bool" label="Show 'Paused' notification" default="true" />
