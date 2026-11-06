@@ -477,7 +477,10 @@ class WeTrakrPlayer(xbmc.Player):
                 item["season"] = tag.getSeason()
                 item["episode"] = tag.getEpisode()
                 item["showtitle"] = tag.getTVShowTitle() or ""
-                item["tvshowid"] = tag.getDbId()  # may not be show id
+                # getDbId() is the EPISODE id: used as a tvshowid it fetched
+                # whichever library show had that number and sent its ids
+                # (Kapibara-san logged as Tama and Friends, 05-11-2026).
+                item["tvshowid"] = utils.get_episode_tvshowid(tag.getDbId())
                 item["uniqueid"] = {}
                 imdb = tag.getIMDBNumber()
                 if imdb:

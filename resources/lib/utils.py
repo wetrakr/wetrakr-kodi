@@ -71,6 +71,17 @@ def get_playing_item(player_id):
     }).get("item", {})
 
 
+def get_episode_tvshowid(episode_id):
+    """Library tvshowid of an episode dbid, or -1 when it is not in the library."""
+    if not episode_id or episode_id < 0:
+        return -1
+    details = get_json_rpc("VideoLibrary.GetEpisodeDetails", {
+        "episodeid": episode_id,
+        "properties": ["tvshowid"]
+    }).get("episodedetails", {})
+    return details.get("tvshowid", -1)
+
+
 def get_tvshow_details(tvshow_id):
     """Fetch TV show details (including uniqueid) for episode resolution."""
     if not tvshow_id or tvshow_id < 0:
