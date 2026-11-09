@@ -170,6 +170,9 @@ def get_shows():
 
 
 def get_movie(movieid):
+    # Streams played outside the library report dbid -1 (Kodi rejects it).
+    if not movieid or movieid < 0:
+        return None
     item = rpc("VideoLibrary.GetMovieDetails", {"movieid": movieid, "properties": MOVIE_PROPS}).get("moviedetails")
     if item:
         item["type"] = "movie"
@@ -177,6 +180,8 @@ def get_movie(movieid):
 
 
 def get_episode(episodeid):
+    if not episodeid or episodeid < 0:
+        return None
     item = rpc("VideoLibrary.GetEpisodeDetails", {"episodeid": episodeid, "properties": EPISODE_PROPS}).get("episodedetails")
     if item:
         item["type"] = "episode"
