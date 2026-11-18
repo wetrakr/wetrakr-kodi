@@ -147,6 +147,32 @@ class WeTrakrAPI:
             )
             return False
 
+    def lookup_rating(self, payload, timeout=4):
+        """Current WeTrakr rating of the item in `payload` (same shape as a
+        scrobble/rating event), so the rating dialog can show it preselected.
+
+        Returns the rating (0.5-10), None when there is none, or False when
+        the server could not be asked (offline, old API, error).
+        """
+        if not self.url or "/webhooks/kodi/" not in self.url:
+            return False
+        body = dict(payload, event="lookup_rating")
+        req = Request(self.url, data=json.dumps(body).encode("utf-8"), method="POST")
+        req.add_header("Content-Type", "application/json")
+        req.add_header("User-Agent", utils.user_agent())
+        try:
+            response = urlopen(req, timeout=timeout)
+            if not 200 <= response.getcode() < 300:
+                return False
+            data = json.loads(response.read().decode("utf-8") or "{}")
+            if "rating" not in data:
+                return False  # API without lookup_rating: it acked it as an event
+            value = data.get("rating")
+            return float(value) if value else None
+        except Exception as e:
+            xbmc.log("[WeTrakr] Previous rating lookup failed: {}".format(str(e)), xbmc.LOGINFO)
+            return False
+
     def send_rating(self, media_type, title, ids, rating, year=None,
                     show_title=None, show_ids=None, season=None, episode=None):
         """Send a rating event to WeTrakr."""

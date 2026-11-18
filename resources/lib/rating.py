@@ -89,11 +89,14 @@ def _ensure_clear():
 
 class RatingDialog(xbmcgui.WindowDialog):
 
-    def __init__(self, title, year=None, poster_path=None):
+    def __init__(self, title, year=None, poster_path=None, previous=None):
         super().__init__()
         self.half = xbmcaddon.Addon('script.wetrakr').getSetting('rating_half_steps') == 'true'
         self.step = 0.5 if self.half else 1
-        self.rating = 5
+        # Rating the user already gave on WeTrakr (rewatch): shown under the
+        # stars and preselected, so they can keep it with OK or change it.
+        self.previous = _snap(previous, self.half)
+        self.rating = self.previous or 5
         self.confirmed = False
         self._name_label = None
         self._star_labels = []
@@ -148,6 +151,8 @@ class RatingDialog(xbmcgui.WindowDialog):
 
         dw = int(W * 0.48)
         dh = int(H * 0.75) if poster_path else int(H * 0.50)
+        if self.previous:
+            dh += int(H * 0.04)  # "Your previous rating" line
         dx = (W - dw) // 2
         dy = (H - dh) // 2
         pad = int(dw * 0.05)
@@ -256,6 +261,16 @@ class RatingDialog(xbmcgui.WindowDialog):
             '', alignment=0x00000002, textColor='FFffffff', font='font14',
         )
         self.addControl(self._name_label)
+
+        if self.previous:
+            y += int(H * 0.045)
+            prev_color = RATING_COLORS[max(1, min(10, int(self.previous + 0.5))) - 1]
+            self.addControl(xbmcgui.ControlLabel(
+                dx, y, dw, int(H * 0.04),
+                u'Your previous rating: [COLOR {}][B]{}/10[/B][/COLOR]'.format(
+                    prev_color, _fmt(self.previous)),
+                alignment=0x00000002, textColor='FF9a9ab8', font='font13',
+            ))
 
         # Hint \u2014 plain ASCII so it renders on every skin/font.
         self.addControl(xbmcgui.ControlLabel(
@@ -390,6 +405,20 @@ def _fmt(value):
     return u'{:g}'.format(value)
 
 
+def _snap(value, half):
+    """Previous rating fitted to the dialog's steps (6.5 -> 7 without half
+    stars, as the colour/name bucket does), or None."""
+    try:
+        value = float(value)
+    except (TypeError, ValueError):
+        return None
+    if value <= 0:
+        return None
+    value = round(value * 2) / 2.0 if half else float(int(value + 0.5))
+    value = max(0.5 if half else 1, min(10, value))
+    return int(value) if value == int(value) else value
+
+
 def should_show_rating(media_type, progress):
     """Check if rating dialog should be shown based on settings."""
     addon = xbmcaddon.Addon("script.wetrakr")
@@ -404,12 +433,13 @@ def should_show_rating(media_type, progress):
     return True
 
 
-def show_rating_dialog(title, year=None, poster_path=None):
+def show_rating_dialog(title, year=None, poster_path=None, previous=None):
     """
     Show a star-based rating dialog (1-10, or 0.5-10 with half steps).
+    `previous` is the user's current rating, shown and preselected.
     Returns the rating or None if cancelled.
     """
-    dialog = RatingDialog(title, year=year, poster_path=poster_path)
+    dialog = RatingDialog(title, year=year, poster_path=poster_path, previous=previous)
     dialog.doModal()
     rating = dialog.get_rating()
     del dialog

@@ -92,6 +92,9 @@ class WeTrakrPlayer(xbmc.Player):
         self._last_progress_at = 0.0
         self._paused = False
         self.poster_art = None
+        # Previous WeTrakr rating of the item, fetched in the background when
+        # it starts (see _prefetch_previous_rating). {} = not asked.
+        self._prev_rating = {}
         # Last 'playing' update sent: wall clock and playback position (s).
         self._last_playing_at = 0.0
         self._last_playing_pos = 0.0
@@ -216,6 +219,7 @@ class WeTrakrPlayer(xbmc.Player):
                 self.current_show = utils.get_tvshow_details(tvshow_id)
 
             self._maybe_resume_from_wetrakr(item, settings)
+            self._prefetch_previous_rating(settings)
 
             self._log("Playing: {} [{}]".format(
                 item.get("title", "?"),
@@ -504,6 +508,45 @@ class WeTrakrPlayer(xbmc.Player):
             self._log("InfoTag fallback error: {}".format(str(e)), xbmc.LOGWARNING)
             return base_item
 
+    def _prefetch_previous_rating(self, settings):
+        """Ask WeTrakr, in the background, for the rating the user already
+        gave this item, so the rating dialog at the end can show it without
+        waiting on the network. Only when that dialog is turned on."""
+        try:
+            if not rating_mod.should_show_rating(self.media_type, 0):
+                return
+            api = self._get_api(settings)
+            if not api:
+                return
+            payload = utils.build_payload(
+                "lookup_rating", self.current_item, self.current_show, runtime=self.total_time)
+            box = {}
+
+            def _lookup():
+                box["rating"] = api.lookup_rating(payload)
+
+            box["thread"] = _dispatch_async(_lookup)
+            self._prev_rating = box
+        except Exception as e:
+            self._log("Previous rating prefetch error: {}".format(str(e)), xbmc.LOGWARNING)
+
+    def _previous_rating(self):
+        """Rating the user already has for the playing item, or None. Waits a
+        moment if the background lookup is still running; when WeTrakr could
+        not be asked, falls back to the Kodi library's user rating (kept in
+        sync with WeTrakr by the library sync)."""
+        box = self._prev_rating or {}
+        thread = box.get("thread")
+        if thread is not None and thread.is_alive():
+            thread.join(2.0)
+        value = box.get("rating", False)
+        if value is False:
+            try:
+                value = float(xbmc.getInfoLabel("VideoPlayer.UserRating") or 0) or None
+            except (TypeError, ValueError):
+                value = None
+        return value
+
     def _maybe_show_rating(self, api, progress):
         """Show rating dialog if enabled and threshold met."""
         try:
@@ -515,7 +558,8 @@ class WeTrakrPlayer(xbmc.Player):
             year = item.get("year")
             ids = utils.extract_ids(item)
 
-            rating_value = rating_mod.show_rating_dialog(title, year, poster_path=self.poster_art)
+            rating_value = rating_mod.show_rating_dialog(
+                title, year, poster_path=self.poster_art, previous=self._previous_rating())
             if rating_value is None:
                 return
 

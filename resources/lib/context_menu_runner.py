@@ -216,7 +216,15 @@ def _send(api, payload, event, extra=None):
 def _handle_rate(api, payload, title, label):
     year = payload.get("year") or None
     poster = xbmc.getInfoLabel("ListItem.Art(poster)") or None
-    rating_value = rating_mod.show_rating_dialog(title, year, poster_path=poster)
+    # Rating the user already gave it on WeTrakr, shown and preselected; with
+    # WeTrakr unreachable, the library's user rating (synced from WeTrakr).
+    previous = api.lookup_rating(payload)
+    if previous is False:
+        try:
+            previous = float(xbmc.getInfoLabel("ListItem.UserRating") or 0) or None
+        except (TypeError, ValueError):
+            previous = None
+    rating_value = rating_mod.show_rating_dialog(title, year, poster_path=poster, previous=previous)
     if rating_value is None:
         return
 
