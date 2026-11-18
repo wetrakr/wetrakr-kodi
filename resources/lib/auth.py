@@ -213,7 +213,7 @@ class AuthDialog(xbmcgui.WindowDialog):
         h = self.getHeight()
 
         # Dialog box dimensions (centered panel)
-        dw = int(w * 0.36)
+        dw = int(w * 0.44)
         dh = int(h * 0.80) if qr_path else int(h * 0.55)
         dx = (w - dw) // 2
         dy = (h - dh) // 2
@@ -312,10 +312,13 @@ class AuthDialog(xbmcgui.WindowDialog):
         self.addControl(self._timer_label)
         y += int(h * 0.038)
 
-        # User code (large, white, bold, spaced out)
-        spaced_code = '   '.join(user_code)
+        # User code (large, white, bold, spaced out). The font comes from the
+        # skin and some skins make font_MainMenu very wide, so the label spans
+        # the whole screen: a wide code spills past the panel instead of being
+        # cut off.
+        spaced_code = ' '.join(user_code)
         self.addControl(xbmcgui.ControlLabel(
-            dx, y, dw, int(h * 0.07),
+            0, y, w, int(h * 0.09),
             '[B]{}[/B]'.format(spaced_code),
             alignment=0x00000002,
             textColor='FFffffff',
@@ -454,7 +457,13 @@ def _device_flow(interactive):
 
     # 2. Prepare QR code
     bg_path = _create_bg_image()
-    qr_path = _download_qr(verification_url)
+    # The QR carries the code, so scanning it fills the activate page and
+    # nothing has to be typed.
+    qr_target = verification_url
+    if user_code:
+        sep = '&' if '?' in qr_target else '?'
+        qr_target = '{}{}code={}&platform=kodi'.format(qr_target, sep, quote(user_code, safe=''))
+    qr_path = _download_qr(qr_target)
 
     # 3. Show custom dialog
     dialog = AuthDialog(bg_path, qr_path, user_code, verification_url, expires_in)
