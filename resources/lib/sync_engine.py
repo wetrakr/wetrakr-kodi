@@ -74,6 +74,9 @@ def _settings():
         "enabled": g("sync_enabled") != "false",
         "upload": g("sync_upload") != "false",
         "download": g("sync_download") != "false",
+        # Per type inside each direction (1.3.15).
+        "upload_kinds": {k for k, sid in (("movie", "sync_upload_movies"), ("episode", "sync_upload_episodes")) if g(sid) != "false"},
+        "download_kinds": {k for k, sid in (("movie", "sync_download_movies"), ("episode", "sync_download_episodes")) if g(sid) != "false"},
         "exclude_plugin": g("sync_exclude_plugin") != "false",
         "watchlist_tag": g("sync_watchlist_tag") != "false",
         "debug": g("debug") == "true",
@@ -249,7 +252,7 @@ class SyncEngine(object):
         if dialog:
             dialog.update(5, message="Reading the Kodi library")
 
-        if cfg["upload"] and (mode != MODE_CHECK or not state["initial_done"]):
+        if cfg["upload"] and cfg["upload_kinds"] and (mode != MODE_CHECK or not state["initial_done"]):
             res.uploaded = self._upload(api, state, mode, dialog)
             store.save(state)
 
@@ -324,6 +327,8 @@ class SyncEngine(object):
 
     def _upload(self, api, state, mode, dialog):
         initial = not state["initial_done"]
+        # A type turned off is not read at all (Settings > Library sync).
+        kinds = self._cfg["upload_kinds"]
         shows = lib.get_shows()
         items = []
         now = time.time()
@@ -332,26 +337,28 @@ class SyncEngine(object):
             # First pass: only what is interesting (played, in progress, rated);
             # later full passes read everything to catch unmarks and removed
             # ratings against the local state.
-            movies = lib.iter_movies(touched_only=initial, should_stop=self._stop)
-            episodes = lib.iter_episodes(touched_only=initial, should_stop=self._stop)
-            for it in movies:
-                self._collect(items, "movie", it, shows, state, initial)
-            for it in episodes:
-                self._collect(items, "episode", it, shows, state, initial)
+            if "movie" in kinds:
+                for it in lib.iter_movies(touched_only=initial, should_stop=self._stop):
+                    self._collect(items, "movie", it, shows, state, initial)
+            if "episode" in kinds:
+                for it in lib.iter_episodes(touched_only=initial, should_stop=self._stop):
+                    self._collect(items, "episode", it, shows, state, initial)
         else:
             since = (state.get("last_scan_at") or now) - SCAN_MARGIN_S
             since_local = lib.local_filter_date(since)
             seen = set()
-            for it in lib.iter_movies(touched_only=True, since_local=since_local, should_stop=self._stop):
-                seen.add(("movie", it["movieid"]))
-                self._collect(items, "movie", it, shows, state, False)
-            for it in lib.iter_episodes(touched_only=True, since_local=since_local, should_stop=self._stop):
-                seen.add(("episode", it["episodeid"]))
-                self._collect(items, "episode", it, shows, state, False)
+            if "movie" in kinds:
+                for it in lib.iter_movies(touched_only=True, since_local=since_local, should_stop=self._stop):
+                    seen.add(("movie", it["movieid"]))
+                    self._collect(items, "movie", it, shows, state, False)
+            if "episode" in kinds:
+                for it in lib.iter_episodes(touched_only=True, since_local=since_local, should_stop=self._stop):
+                    seen.add(("episode", it["episodeid"]))
+                    self._collect(items, "episode", it, shows, state, False)
             # Ratings and resume resets leave no date to filter by: the monitor
             # hands over the ids it saw in VideoLibrary.OnUpdate.
             for kind, dbid in self.monitor.take_dirty_ids():
-                if (kind, dbid) in seen:
+                if (kind, dbid) in seen or kind not in kinds:
                     continue
                 it = lib.get_movie(dbid) if kind == "movie" else lib.get_episode(dbid)
                 if it:
@@ -591,6 +598,8 @@ class SyncEngine(object):
         for kind, dbid, item in self.index.find(row_type, row.get("ids"), row.get("series_ids"), row.get("season"), row.get("episode")):
             if kind == "tvshow":
                 continue    # shows only matter for the watchlist tag
+            if kind not in self._cfg["download_kinds"]:
+                continue
             if lib.is_excluded(item, self._cfg["exclude_plugin"]):
                 continue
             data = self._item_data(item)
@@ -683,7 +692,7 @@ class SyncEngine(object):
 
         for row in rows:
             for kind, dbid, item in self.index.find(row.get("type"), row.get("ids"), row.get("series_ids"), row.get("season"), row.get("episode")):
-                if kind == "tvshow" or lib.is_excluded(item, self._cfg["exclude_plugin"]):
+                if kind == "tvshow" or kind not in self._cfg["download_kinds"] or lib.is_excluded(item, self._cfg["exclude_plugin"]):
                     continue
                 key = store.item_key(kind, dbid)
                 wanted.add(key)
@@ -723,7 +732,7 @@ class SyncEngine(object):
             if not st.get("wpos") or key in wanted or key == playing:
                 continue
             kind = "movie" if key.startswith("m") else "episode" if key.startswith("e") else None
-            if not kind:
+            if not kind or kind not in self._cfg["download_kinds"]:
                 continue
             dbid = _int(key[1:])
             item = self.index.movies.get(dbid) if kind == "movie" else self.index.episodes.get(dbid)

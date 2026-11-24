@@ -170,6 +170,8 @@ class SyncMonitor(xbmc.Monitor):
         addon = xbmcaddon.Addon("script.wetrakr")
         if addon.getSetting("sync_enabled") == "false" or addon.getSetting("sync_upload") == "false":
             return
+        if addon.getSetting("sync_upload_movies" if kind == "movie" else "sync_upload_episodes") == "false":
+            return
         token = addon.getSetting("api_token")
         if not token:
             return
